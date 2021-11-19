@@ -17,9 +17,9 @@ NSS sygnal type output hardware
 NSS polarity NSS polarity low
 
 connection
-STM32         AD9833
-SPI_MOSI ->   SDATA
-SPI_SCK  ->   SCLK
-SPI_NSS  ->   FSYNC
+STM32    to     AD9833
+SPI_MOSI ->   SDATA;
+SPI_SCK  ->   SCLK;
+SPI_NSS  ->   FSYNC;
 
 I took the synchronization for the oscillator from an external 10 MHz oscillator, the output was controlled by an oscilloscope.
