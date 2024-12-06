@@ -1,114 +1,86 @@
 /***************************************************************************//**
- * File	AD9833.c
- * Title	AD9833 Wave Generator for STM32 HAL
- * Author:    Ivan Vladimirovich Kozyrev  <ivanesxxx@gmail.com>
- * Created on: Nov 19, 2021
- * Software:  STM32CubeIDE
- * Hardware:  all stm32 with hardware spi
+ * File    AD9833.c
+ * Title   AD9833 Wave Generator for STM32 HAL
+ * Author  Ivan Vladimirovich Kozyrev <ivanesxxx@gmail.com>
+ * Created on Nov 19, 2021
+ * Software STM32CubeIDE
+ * Hardware All STM32 with hardware SPI
 *******************************************************************************/
 #include "AD9833.h"
+
 // ------------------- Variables ----------------
-uint16_t FRQLW = 0;    			// FREQ REG LSB
-uint16_t FRQHW = 0;    			// FREQ REG MSB
-uint32_t  phaseVal=0;  			// Phase Value
-uint8_t wave_value=0;  			// Wave type
-uint16_t last_phase_val =0;		// Phase value in degree
-uint32_t FreqWord =0;			// Value Frequency Register
+static uint16_t FRQLW = 0;        // FREQ REG LSB
+static uint16_t FRQHW = 0;        // FREQ REG MSB
+static uint32_t phaseVal = 0;     // Phase Value
+static uint8_t wave_value = 0;    // Wave type
+static uint16_t last_phase_val = 0; // Phase value in degrees
+static uint32_t FreqWord = 0;     // Value Frequency Register
+
 // -------------------------------- Functions --------------------------------
 
 /**
- * @brief Sends data ad9833
- * @param[in]	data data to send
- * @return none.
+ * @brief Sends data to AD9833
+ * @param[in] data Data to send
+ * @return None.
  */
-void WriteRegister(int16_t data) {
-
-	HAL_SPI_Transmit (&hspi1, (uint8_t*) &data, 1, 500);
-
+static void WriteRegister(uint16_t data) {
+    HAL_SPI_Transmit(&hspi1, (uint8_t*)&data, sizeof(data), HAL_MAX_DELAY);
 }
 
 /**
- * @brief Selection of the type of output signal - sine, triangle, square
- * @param[in]	Wave wave type value from 0 to 2
- * @return none.
+ * @brief Selects the type of output signal - sine, triangle, square
+ * @param[in] wave Wave type value (0: sine, 1: square, 2: triangle)
+ * @return None.
  */
-void AD9833_SetWave(uint8_t Wave){
-  switch(Wave){
-  case 0:
-	WriteRegister(SINWAVE);
-	wave_value=0;
-    break;
-  case 1:
-	WriteRegister(SQUAREWAVE);
-	wave_value=1;
-    break;
-  case 2:
-	WriteRegister(TRIANGLEWAVE);
-	wave_value=2;
-    break;
-  default:
-    break;
-  }
-}
-
-/**
- * @brief Shifts the phase by the required value in degrees. PHAS0 register
- * @param[in]	Phase the value of the phase shift relative to the current in degrees
- * @return none.
- */
-void AD9833_SetPhase(uint16_t Phase){
-	last_phase_val += Phase;
-	if(last_phase_val > 360)last_phase_val -= 360;
-	phaseVal = (uint32_t)(last_phase_val * 4096/360);
-	//Set control bits PHASE0 or PHASE1
-	WriteRegister(phaseVal|PHASEZEROREGBITS);
-
-}
-
-/**
- * @brief Sets the frequency value in Hz.FREQ0 register, 28 bits
- * @param[in]	frequency set frequency in Hz
- * @return none.
- */
-void AD9833setFrequency(uint32_t frequency) {
-
-	FreqWord = (uint64_t)((uint64_t)frequency * FREQUENCYFACTOR) / FMCLK;
-	FRQHW = (int16_t)(FreqWord >> 14);
-	//FRQLW = (int16_t)(FreqWord & 0x0fff);
-	FRQLW = (int16_t)(FreqWord & 0x3fff);
-
-  //Set control bits FREQ0 or FREQ1
-	FRQLW |= FREQZEROREGBITS;
-	FRQHW |= FREQZEROREGBITS;
-	//setting the frequency length (28 bit or 14) and wave type
-  switch(wave_value){
-  	      case 0:
-  	      	WriteRegister(CONTROLBITTWOFREQUENCY|SINWAVE);
-  	        break;
-  	      case 1:
-  	      	WriteRegister(CONTROLBITTWOFREQUENCY|SQUAREWAVE);
-  	      	break;
-  	      case 2:
-  	      	WriteRegister(CONTROLBITTWOFREQUENCY|TRIANGLEWAVE);
-  	      	break;
-  	      default:
-  	        break;
-  	      }
-  WriteRegister(FRQLW);  // Write lower 14 bits
-  WriteRegister(FRQHW);  // Write upper 14 bits
-
+void AD9833_SetWave(WaveType wave) {
+    switch (wave) {
+        case SIN:
+            WriteRegister(SINWAVE);
+            break;
+        case SQR:
+            WriteRegister(SQUAREWAVE);
+            break;
+        case TRI:
+            WriteRegister(TRIANGLEWAVE);
+            break;
+        default:
+            // Invalid wave type, do nothing
+            break;
     }
-
-/**
- * @brief The reset function resets appropriate internal registers to 0
- * to provide an analog output of midscale
- * @param[in]	none
- * @return none.
- */
-void AD9833reset(void) {
-  WriteRegister(RESETBIT);
+    wave_value = wave; // Update the current wave value
 }
 
+/**
+ * @brief Shifts the phase by the required value in degrees (PHAS0 register)
+ * @param[in] phase The value of the phase shift in degrees
+ * @return None.
+ */
+void AD9833_SetPhase(uint16_t phase) {
+    last_phase_val = (last_phase_val + phase) % 360; // Keep within 0-360 degrees
+    phaseVal = (uint32_t)(last_phase_val * 4096 / 360);
+    WriteRegister(phaseVal | PHASEZEROREGBITS); // Set control bits PHASE0 or PHASE1
+}
 
+/**
+ * @brief Sets the frequency value in Hz (FREQ0 register, 28 bits)
+ * @param[in] frequency Frequency to set in Hz
+ * @return None.
+ */
+void AD9833_SetFrequency(uint32_t frequency) {
+    FreqWord = (uint64_t)((uint64_t)frequency * FREQUENCYFACTOR) / FMCLK;
+    FRQHW = (uint16_t)(FreqWord >> 14);
+    FRQLW = (uint16_t)(FreqWord & 0x3FFF);
 
+    // Set control bits FREQ0 or FREQ1
+    WriteRegister(FREQZEROREGBITS | (wave_value == SIN ? SINWAVE : (wave_value == SQR ? SQUAREWAVE : TRIANGLEWAVE)));
+    WriteRegister(FRQLW);  // Write lower 14 bits
+    WriteRegister(FRQHW);  // Write upper 14 bits
+}
 
+/**
+ * @brief Resets appropriate internal registers to provide an analog output of midscale
+ * @return None.
+ */
+void AD9833_Reset(void) {
+    WriteRegister(RESETBIT);
+}
