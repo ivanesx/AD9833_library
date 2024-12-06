@@ -74,7 +74,8 @@ void AD9833setFrequency(uint32_t frequency) {
 
 	FreqWord = (uint64_t)((uint64_t)frequency * FREQUENCYFACTOR) / FMCLK;
 	FRQHW = (int16_t)(FreqWord >> 14);
-	FRQLW = (int16_t)(FreqWord & 0x0fff);
+	//FRQLW = (int16_t)(FreqWord & 0x0fff);
+	FRQLW = (int16_t)(FreqWord & 0x3fff);
 
   //Set control bits FREQ0 or FREQ1
 	FRQLW |= FREQZEROREGBITS;
