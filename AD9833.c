@@ -7,7 +7,6 @@
  * Hardware All STM32 with hardware SPI
 *******************************************************************************/
 #include "AD9833.h"
-
 // ------------------- Variables ----------------
 static uint16_t FRQLW = 0;        // FREQ REG LSB
 static uint16_t FRQHW = 0;        // FREQ REG MSB
@@ -24,7 +23,10 @@ static uint32_t FreqWord = 0;     // Value Frequency Register
  * @return None.
  */
 static void WriteRegister(uint16_t data) {
-    HAL_SPI_Transmit(&hspi1, (uint8_t*)&data, sizeof(data), HAL_MAX_DELAY);
+    if (HAL_SPI_Transmit(&hspi1, (uint8_t*)&data, sizeof(data), HAL_MAX_DELAY) != HAL_OK) {
+        // Обработка ошибки, например, можно использовать LED или UART для отладки
+        Error_Handler(); // Предполагается, что функция Error_Handler() определена где-то в проекте
+    }
 }
 
 /**
@@ -48,6 +50,10 @@ void AD9833_SetWave(WaveType wave) {
             break;
     }
     wave_value = wave; // Update the current wave value
+    // Добавляем дополнительную проверку после записи
+    if (HAL_SPI_Transmit(&hspi1, (uint8_t*)&wave_value, sizeof(wave_value), HAL_MAX_DELAY) != HAL_OK) {
+        Error_Handler();
+    }
 }
 
 /**
@@ -58,7 +64,12 @@ void AD9833_SetWave(WaveType wave) {
 void AD9833_SetPhase(uint16_t phase) {
     last_phase_val = (last_phase_val + phase) % 360; // Keep within 0-360 degrees
     phaseVal = (uint32_t)(last_phase_val * 4096 / 360);
-    WriteRegister(phaseVal | PHASEZEROREGBITS); // Set control bits PHASE0 or PHASE1
+    uint16_t phaseData = phaseVal | PHASEZEROREGBITS; // Set control bits PHASE0 or PHASE1
+    WriteRegister(phaseData); // Send phase data to AD9833
+    // Добавляем дополнительную проверку после записи
+    if (HAL_SPI_Transmit(&hspi1, (uint8_t*)&phaseData, sizeof(phaseData), HAL_MAX_DELAY) != HAL_OK) {
+        Error_Handler();
+    }
 }
 
 /**
@@ -70,11 +81,20 @@ void AD9833_SetFrequency(uint32_t frequency) {
     FreqWord = (uint64_t)((uint64_t)frequency * FREQUENCYFACTOR) / FMCLK;
     FRQHW = (uint16_t)(FreqWord >> 14);
     FRQLW = (uint16_t)(FreqWord & 0x3FFF);
-
+    
+    uint16_t freqControlBits = FREQZEROREGBITS | (wave_value == SIN ? SINWAVE : (wave_value == SQR ? SQUAREWAVE : TRIANGLEWAVE));
+    
     // Set control bits FREQ0 or FREQ1
-    WriteRegister(FREQZEROREGBITS | (wave_value == SIN ? SINWAVE : (wave_value == SQR ? SQUAREWAVE : TRIANGLEWAVE)));
+    WriteRegister(freqControlBits);
     WriteRegister(FRQLW);  // Write lower 14 bits
     WriteRegister(FRQHW);  // Write upper 14 bits
+    
+    // Добавляем дополнительные проверки после записи
+    if (HAL_SPI_Transmit(&hspi1, (uint8_t*)&freqControlBits, sizeof(freqControlBits), HAL_MAX_DELAY) != HAL_OK ||
+        HAL_SPI_Transmit(&hspi1, (uint8_t*)&FRQLW, sizeof(FRQLW), HAL_MAX_DELAY) != HAL_OK ||
+        HAL_SPI_Transmit(&hspi1, (uint8_t*)&FRQHW, sizeof(FRQHW), HAL_MAX_DELAY) != HAL_OK) {
+        Error_Handler();
+    }
 }
 
 /**
@@ -83,4 +103,8 @@ void AD9833_SetFrequency(uint32_t frequency) {
  */
 void AD9833_Reset(void) {
     WriteRegister(RESETBIT);
+    // Добавляем дополнительную проверку после записи
+    if (HAL_SPI_Transmit(&hspi1, (uint8_t*)&RESETBIT, sizeof(RESETBIT), HAL_MAX_DELAY) != HAL_OK) {
+        Error_Handler();
+    }
 }
